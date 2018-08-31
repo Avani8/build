@@ -9,7 +9,6 @@ override COMPILE_S_USER    := 64
 override COMPILE_S_KERNEL  := 64
 
 DEBUG ?= 0
-# Need to set this before including common.mk
 BUILDROOT_GETTY_PORT ?= ttyS0
 
 include common.mk
@@ -31,7 +30,7 @@ MODULE_OUTPUT		?= $(ROOT)/module_output
 ################################################################################
 # Targets
 ################################################################################
-all:arm-tf u-boot linux optee-os update_rootfs 
+all:arm-tf u-boot linux optee-os buildroot
 clean: arm-tf-clean buildroot-clean u-boot-clean optee-os-clean
 
 include toolchain.mk
@@ -48,11 +47,13 @@ ARM_TF_FLAGS ?= \
 	BL32_EXTRA2=$(OPTEE_OS_PAGEABLE_V2_BIN) \
 	BL33=$(UBOOT_BIN) \
 	PLAT=sun50i_h5 \
+	ARM_TSP_RAM_LOCATION=dram \
+	DEBUG=0 \
 	SPD=opteed
 
-
+#
 arm-tf: optee-os u-boot
-	$(ARM_TF_EXPORTS) $(MAKE) -C $(ARM_TF_PATH) $(ARM_TF_FLAGS) all fip
+	$(ARM_TF_EXPORTS) $(MAKE) -C $(ARM_TF_PATH) $(ARM_TF_FLAGS)  all fip
 
 arm-tf-clean:
 	$(ARM_TF_EXPORTS) $(MAKE) -C $(ARM_TF_PATH) $(ARM_TF_FLAGS) clean
@@ -64,13 +65,14 @@ arm-tf-clean:
 UBOOT_EXPORTS ?= CROSS_COMPILE="$(CCACHE)$(AARCH64_CROSS_COMPILE)"
 
 UBOOT_DEFCONFIG_FILES := \
-	$(UBOOT_PATH)/configs/nanopi_h5_defconfig \
-	$(ROOT)/build/kconfigs/UBOOT_nano.conf
+	$(UBOOT_PATH)/configs/nanopi_neo_plus2_defconfig \
+	$(ROOT)/build/kconfigs/uboot_nano.conf
 
+uboot-defconfig: $(UBOOT_PATH)/.config
 .PHONY: u-boot
 u-boot:
-	cd $(UBOOT_PATH) && \
-		scripts/kconfig/merge_config.sh $(UBOOT_DEFCONFIG_FILES)
+	cd $(UBOOT_PATH) \
+		
 	$(UBOOT_EXPORTS) $(MAKE) -C $(UBOOT_PATH) all
 
 u-boot-clean:
@@ -110,37 +112,9 @@ OPTEE_OS_CLEAN_COMMON_FLAGS += PLATFORM=sunxi-sun50i_h5
 optee-os-clean: optee-os-clean-common
 
 
-################################################################################
-# Root FS
-################################################################################
-.PHONY: update_rootfs
-# Make sure this is built before the buildroot target which will create the
-# root file system based on what's in $(OUT_BR) 
-buildroot: update_rootfs
-update_rootfs: arm-tf linux u-boot
-	@mkdir -p --mode=755 $(OUT_BR)/boot
-	@mkdir -p --mode=755 $(OUT_BR)/usr/bin
-	@install -v -p --mode=755 $(LINUX_DTB)/sun50i-h5-nanopi-neo-plus2.dtb $(OUT_BR)/boot/sun50i-h5-nanopi-neo-plus2.dtb
-	@install -v -p --mode=755 $(NPI_BOOT_CONFIG)/.config $(OUT_BR)/boot/config.txt
-	@install -v -p --mode=755 $(LINUX_IMAGE)/Image $(OUT_BR)/boot/Image
-	@install -v -p --mode=755 $(ARM_TF_PATH)/build/sun50i_h5/release/bl31.bin $(OUT_BR)/boot/bl31.bin
-	@install -v -p --mode=755 $(ARM_TF_PATH)/build/sun50i_h5/release/bl31.bin $(OUT_BR)/boot/fip.bin
-	@install -v -p --mode=755 $(UBOOT_PATH)/u-boot.itb $(OUT_BR)/boot/u-boot.itb
-	@install -v -p --mode=755 $(UBOOT_BIN) $(OUT_BR)/boot/sunxi-spl.bin
-	
-	@cd $(MODULE_OUTPUT) && find . | cpio -pudm $(OUT_BR) 
 
-################################################################################
-# Busybox
-################################################################################
-BUSYBOX_COMMON_TARGET = rpi3
-BUSYBOX_CLEAN_COMMON_TARGET = rpi3 clean
 
-busybox: busybox-common
 
-busybox-clean: busybox-clean-common
-
-busybox-cleaner: busybox-cleaner-common
 ################################################################################
 # Build-ROOT
 ################################################################################
@@ -149,20 +123,21 @@ $(ROOT)/out-br/images/ramdisk.img: $(ROOT)/out-br/images/rootfs.cpio.gz
 	$(ROOT)/../u-boot/tools/mkimage -A arm64 -O linux -T ramdisk -C gzip \
 		-d $< $@
 
-FTP-UPLOAD = ftp-upload -v --host $(nano_IP) --dir SOFTWARE
+#FTP-UPLOAD = ftp-upload -v --host $(nano_IP) --dir SOFTWARE
 
-.PHONY: flash
-flash: $(ROOT)/out-br/images/ramdisk.img
-	@test -n "$(nano_IP)" || \
-		(echo "nano_IP not set" ; exit 1)
-	$(FTP-UPLOAD) $(ROOT)/u-boot/spl/sunxi-spl.bin
-	$(FTP-UPLOAD) $(ROOT)/u-boot/u-boot.itb
-	$(FTP-UPLOAD) $(ARM_TF_PATH)/build/sun50i_h5/release/bl31.bin
-	$(FTP-UPLOAD) $(ARM_TF_PATH)/build/sun50i_h5/release/fip.bin
-	$(FTP-UPLOAD) $(ROOT)/linux/arch/arm64/boot/Image
-	$(FTP-UPLOAD) $(ROOT)/linux/arch/arm64/boot/dts/allwinner/sun50i-h5-nanopi*.dtb
-	$(FTP-UPLOAD) $(ROOT)/out-br/images/ramdisk.img
+#.PHONY: flash
+#flash: $(ROOT)/out-br/images/ramdisk.img
+	#@test -n "$(nano_IP)" || \
+	#	(echo "nano_IP not set" ; exit 1)
+	#$(FTP-UPLOAD) $(ROOT)/u-boot/spl/sunxi-spl.bin
+	#$(FTP-UPLOAD) $(ROOT)/u-boot/u-boot.itb
+	#$(FTP-UPLOAD) $(ARM_TF_PATH)/build/sun50i_h5/release/bl31.bin
+	#$(FTP-UPLOAD) $(ARM_TF_PATH)/build/sun50i_h5/release/fip.bin
+	#$(FTP-UPLOAD) $(ROOT)/linux/arch/arm64/boot/Image
+	#$(FTP-UPLOAD) $(ROOT)/linux/arch/arm64/boot/dts/allwinner/sun50i-h5-nanopi*.dtb
+	#$(FTP-UPLOAD) $(ROOT)/out-br/images/ramdisk.img
 	
+
 
 ################################################################################
 #Create Image
