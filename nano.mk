@@ -16,7 +16,7 @@ include common.mk
 ################################################################################
 # Paths to git projects and various binaries
 ################################################################################
-ARM_TF_PATH		?= $(ROOT)/arm-trusted-firmware-master
+ARM_TF_PATH		?= $(ROOT)/arm-trusted-firmware
 UBOOT_PATH		?= $(ROOT)/u-boot
 UBOOT_BIN		?= $(UBOOT_PATH)/spl/sunxi-spl.bin
 QEMU_PATH	        ?= $(ROOT)/qemu
